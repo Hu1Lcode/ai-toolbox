@@ -1,0 +1,28 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ---- 本地构建环境（绿色 Python 解释器，不入库）----
+pyenv/
+python-embed.zip
+get-pip.py
+
+# ---- PyInstaller 产物 ----
+build/
+dist/
+*.spec.bak
+vibelight.spec.spec
+
+# ---- 运行期生成的状态文件（不入库）----
+# 注意：state.json 实际写在 %APPDATA%\VibeLight，本仓库内不会出现，
+# 此规则用于防止本地误造的同名文件被提交。
+state.json
+config.json
+
+# ---- 杂项 ----
+*.tmp
+*.bak
+*.log
+green

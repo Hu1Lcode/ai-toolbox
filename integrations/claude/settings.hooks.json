@@ -1,0 +1,17 @@
+{
+  "_comment": "Claude Code hooks 配置片段（供安装脚本合并进 ~/.claude/settings.json）。命令里的 {VIBELIGHT} 会被 install 脚本替换为 vibelight.exe 的绝对路径。",
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "{VIBELIGHT} set red --src claude --detail UserPromptSubmit" }] }
+    ],
+    "PreToolUse": [
+      { "hooks": [{ "type": "command", "command": "{VIBELIGHT} set amber --src claude --detail PreToolUse" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "{VIBELIGHT} set green --src claude --detail Stop" }] }
+    ],
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "{VIBELIGHT} set amber --src claude --detail Notification" }] }
+    ]
+  }
+}
