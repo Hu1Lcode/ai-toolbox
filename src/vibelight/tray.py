@@ -30,8 +30,9 @@ LABELS = {
 }
 # 触发桌面通知的状态
 NOTIFY_ON = {"amber", "green"}
-# 轮询间隔（秒）。state.json 很小，轮询 mtime 足够轻量
-POLL_INTERVAL = 0.5
+# 轮询间隔（秒）。state.json 很小，高频轮询无压力；与 watcher 的写间隔
+# 叠加决定端到端延迟（watcher 0.2s 写 + 本处 0.3s 读 ≈ 最坏 0.5s）。
+POLL_INTERVAL = 0.3
 # 红灯超过该分钟数视为“可能卡死”，tooltip 提示
 RED_FADE_MINUTES = 10
 
@@ -176,7 +177,7 @@ class TrayApp:
         self._watchers = []
         try:
             from .zcode_watcher import ZCodeWatcher
-            zw = ZCodeWatcher(poll_interval=0.5)
+            zw = ZCodeWatcher(poll_interval=0.2)
             self._watchers.append(zw)
             threading.Thread(target=zw.run, daemon=True).start()
         except Exception as e:

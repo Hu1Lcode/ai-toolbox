@@ -41,7 +41,18 @@ def _today_log() -> Path:
 
 
 def _classify(line: str) -> str | None:
-    """解析一行 JSONL，返回应设置的状态，或 None（不决定状态）。"""
+    """解析一行 JSONL，返回应设置的状态，或 None（不决定状态）。
+
+    基于 ZCode 实际日志事件（已用真实会话验证）：
+      turn.started            → red   用户发了新消息，开始思考
+      model.*.completed       → 不直接判定（见 stream.completed）
+      tool.call.started       → amber 工具执行中
+      tool.permission.resolved→ amber 权限已决断，即将执行工具
+      model.sdk.stream.completed + finishReason:
+          end_turn            → green 模型回复完毕
+          tool-calls/tool_use → amber 模型要调工具
+      turn.completed          → green 整轮彻底结束
+    """
     try:
         rec = json.loads(line)
     except json.JSONDecodeError:
@@ -49,29 +60,30 @@ def _classify(line: str) -> str | None:
     event = rec.get("event", "")
     ctx = rec.get("context", {}) or {}
 
-    # 1) 工具调用开始/授权请求 → amber
-    if event in ("tool.call.started", "tool.approval.request"):
-        tool = ctx.get("toolName", "tool")
+    # 用户提交消息 / 新 turn 开始 → 立即红灯
+    if event == "turn.started":
+        return "red"
+
+    # 工具相关 → 黄灯（执行中 / 待授权）
+    if event in ("tool.call.started", "tool.approval.request",
+                 "tool.permission.resolved"):
         return "amber"
 
-    # 2) 模型流式响应完成：看 finishReason
+    # 模型流式响应结束：按 finishReason 分流
     if event == "model.sdk.stream.completed":
-        # chunkCounts 里若出现 tool-approval-request 说明卡在授权
         chunk = ctx.get("chunkCounts", {}) or {}
-        if ctx.get("toolApprovalRequest") or "tool-approval-request" in chunk:
+        if "tool-approval-request" in chunk:
             return "amber"
         finish = ctx.get("finishReason") or ctx.get("rawFinishReason") or ""
         if finish in ("tool-calls", "tool_use", "tool_use_stop"):
             return "amber"
         if finish in ("end_turn", "stop", "max_tokens"):
             return "green"
-        # 未知 finish，保守按 amber（很可能要继续工具循环）
-        return "amber"
+        return "amber"  # 未知 finish，保守按黄
 
-    # 3) 模型请求开始（network 启动）但还没完成 → red
-    if event in ("model.request.started", "model.network.started",
-                 "model.sdk.stream.started"):
-        return "red"
+    # 整轮结束 → 绿灯（最可靠的“完成”信号）
+    if event == "turn.completed":
+        return "green"
 
     return None
 
