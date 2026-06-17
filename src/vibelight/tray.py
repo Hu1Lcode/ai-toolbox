@@ -161,10 +161,27 @@ class TrayApp:
 
     def _on_quit(self, icon, item) -> None:
         self._stop.set()
+        # 停止所有 provider watcher
+        for w in getattr(self, "_watchers", []):
+            try:
+                w.stop()
+            except Exception:
+                pass
         icon.stop()
 
     # ---------- 启动 ----------
     def run(self) -> None:
+        # 启动各平台的日志监控 provider（后台线程）。
+        # 它们各自把状态写进 state.json，托盘只负责展示聚合结果。
+        self._watchers = []
+        try:
+            from .zcode_watcher import ZCodeWatcher
+            zw = ZCodeWatcher(poll_interval=0.5)
+            self._watchers.append(zw)
+            threading.Thread(target=zw.run, daemon=True).start()
+        except Exception as e:
+            print(f"[tray] ZCode watcher 启动失败: {e}", flush=True)
+
         # 初始图标：先强制读一次
         self._last_mtime = 0.0
         self._refresh()

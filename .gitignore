@@ -25,4 +25,5 @@ config.json
 *.tmp
 *.bak
 *.log
+build_log.txt
 green
