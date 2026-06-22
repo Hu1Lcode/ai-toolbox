@@ -1,7 +1,8 @@
 """桌面悬浮灯 UI 后端（pywin32）。
 
-一个无边框、置顶、分层的圆形灯窗口，常驻桌面：
+一个无边框、置顶、分层的像素风交通灯窗口，常驻桌面：
 - 120x120 像素，默认在屏幕右上角（留 20px 边距）。
+- 红黄绿三灯竖排，对应状态灯亮，其余灯灰（灭）。
 - 可拖动到任意位置，松手后位置写入 config.json，下次启动恢复。
 - 右键菜单：刷新状态 / 切换到托盘模式 / 退出。
 - 状态变化时通过 engine.on_update 回调驱动重绘。
@@ -75,7 +76,7 @@ def _pil_to_bitmap_info(pil_img: Image.Image):
     bmi = (
         b"\x28\x00\x00\x00"  # biSize = 40
         + w.to_bytes(4, "little")  # biWidth
-        + h.to_bytes(4, "little")  # biHeight (正=自下而上)
+        + (-h).to_bytes(4, "little", signed=True)  # biHeight (负=自上而下 DIB)
         + b"\x01\x00"  # biPlanes = 1
         + b"\x20\x00"  # biBitCount = 32
         + b"\x00\x00\x00\x00"  # biCompression = BI_RGB
@@ -275,7 +276,7 @@ class DesktopApp:
         if self._hwnd is None:
             return
         try:
-            img = icons.make_icon(self._current_state, size=WINDOW_SIZE, frame=False)
+            img = icons.make_traffic_light(self._current_state, size=WINDOW_SIZE)
             bmi, pixels = _pil_to_bitmap_info(img)
 
             # 首次：创建兼容 DC 和 DIB section

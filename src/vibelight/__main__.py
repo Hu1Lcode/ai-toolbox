@@ -1,7 +1,7 @@
 """VibeLight 主入口。
 
 子命令：
-- 无参 / desktop   : 启动桌面悬浮灯（默认，置顶圆形灯）
+- 无参 / desktop   : 启动桌面悬浮灯（默认，像素风交通灯）
 - tray             : 启动系统托盘守护进程（备选模式）
 - set <state>      : 写入某个 agent 的状态（供 hook 调用，瞬时退出）
 - status           : 打印当前所有 agent 状态
@@ -90,6 +90,7 @@ def _cmd_icons(args) -> int:
     os.makedirs(out_dir, exist_ok=True)
     for name in icons._COLORS:
         icons.make_icon(name).save(os.path.join(out_dir, f"{name}.png"))
+        icons.make_traffic_light(name).save(os.path.join(out_dir, f"tl_{name}.png"))
     print(f"导出图标到 {os.path.abspath(out_dir)}")
     return 0
 
