@@ -7,11 +7,17 @@
 - status           : 打印当前所有 agent 状态
 - clear <agent>    : 移除某个 agent 的状态
 - icons            : 导出四态 PNG 图标到 assets/icons
+- install-hooks    : 安装/卸载 Claude Code hooks（让 Claude 状态自动上报）
+                     ZCode 靠内置日志监控，无需此命令。
 
 示例（Claude Code hook 调用）：
     vibelight.exe set red --src claude --detail "thinking"
     vibelight.exe set amber --src claude --detail "PreToolUse: Write"
     vibelight.exe set green --src claude --detail "Stop"
+
+示例（配 Claude Code hooks）：
+    vibelight.exe install-hooks --claude
+    vibelight.exe install-hooks --claude --uninstall
 """
 from __future__ import annotations
 
@@ -95,6 +101,19 @@ def _cmd_icons(args) -> int:
     return 0
 
 
+def _cmd_install_hooks(args) -> int:
+    from . import hooks  # 延迟导入，避免 CLI 其它子命令也被拉起该模块
+    # 未显式选平台时默认只装 claude（ZCode 有内置日志监控，不需要 hook）
+    platforms = []
+    if args.claude:
+        platforms.append("claude")
+    if args.zcode:
+        platforms.append("zcode")
+    if not platforms:
+        platforms = ["claude"]
+    return hooks.run(platforms, args.exe, args.uninstall)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="vibelight",
@@ -129,6 +148,23 @@ def build_parser() -> argparse.ArgumentParser:
     # icons
     pi = sub.add_parser("icons", help="导出四态图标 PNG")
     pi.set_defaults(func=_cmd_icons)
+
+    # install-hooks（配 Claude Code hooks；ZCode 靠内置监控，通常不需要）
+    pih = sub.add_parser(
+        "install-hooks",
+        help="安装/卸载 Claude Code hooks（让 Claude 状态自动上报）",
+        description=(
+            "安装/卸载 VibeLight hooks 到 Claude Code / ZCode。\n"
+            "默认装 Claude Code（ZCode 靠内置日志监控，无需 hook；"
+            "手动装 --zcode 会与内置监控重复上报，不建议）。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    pih.add_argument("--claude", action="store_true", help="操作 Claude Code")
+    pih.add_argument("--zcode", action="store_true", help="操作 ZCode（实验性，通常不需要）")
+    pih.add_argument("--exe", default=None, help="指定 vibelight.exe 路径（默认用自身）")
+    pih.add_argument("--uninstall", action="store_true", help="移除已安装的 hooks")
+    pih.set_defaults(func=_cmd_install_hooks)
 
     return p
 

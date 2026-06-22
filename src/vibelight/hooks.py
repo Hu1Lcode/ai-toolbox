@@ -1,26 +1,27 @@
-#!/usr/bin/env python3
-"""一键安装 VibeLight hooks 到 Claude Code / ZCode。
+"""一键安装/卸载 VibeLight hooks 到 Claude Code（内置子命令的实现）。
 
-注意：推荐使用内置子命令 `vibelight.exe install-hooks`（无需 Python、无需 clone 源码）。
-本脚本为源码运行场景的备用，逻辑与 src/vibelight/hooks.py 保持一致；
-常量 HOOK_DEFS / MARKER 如需变更，两处必须同步。
+这是 `vibelight install-hooks` 子命令的后端。把它内置进 exe 后，
+Claude Code 用户下单个 vibelight.exe 就能配 hook，无需 Python、无需 clone 源码。
 
-用法：
-    python install_hooks.py                 # 自动探测并安装到所有已发现的支持平台
-    python install_hooks.py --claude        # 只装 Claude Code
-    python install_hooks.py --zcode         # 只装 ZCode
-    python install_hooks.py --exe PATH      # 指定 vibelight.exe 路径
-    python install_hooks.py --uninstall     # 移除已安装的 hooks
+用法（由 __main__.py 转发）：
+    vibelight install-hooks                  # 默认装 Claude Code（ZCode 靠内置日志监控，不需要 hook）
+    vibelight install-hooks --claude         # 只装 Claude Code
+    vibelight install-hooks --zcode          # 只装 ZCode（实验性，通常不需要）
+    vibelight install-hooks --exe PATH       # 指定 vibelight.exe 路径（默认用自己）
+    vibelight install-hooks --uninstall      # 移除已安装的 hooks
 
 工作原理：
-1. 定位 vibelight.exe（默认与打包产物同级，或用 --exe 指定）。
+1. 定位 vibelight.exe（打包环境用 sys.executable 即自身；开发环境找 dist/vibelight.exe）。
 2. 找到目标平台的 settings.json（Claude: ~/.claude/settings.json）。
-3. 把 hooks 片段合并进去（已存在则跳过，幂等）。
-4. 写入一个备份文件 settings.json.vibelight.bak。
+3. 把 hooks 片段合并进去（已存在则先移除旧的同标记项，幂等）。
+4. 写入一个备份文件 settings.json.vibelight.bak（仅在原文件存在时）。
+
+与 integrations/install_hooks.py 的关系：
+    本模块是权威实现；integrations/install_hooks.py 保留为源码运行场景的备用，
+    两者逻辑保持一致，常量 HOOK_DEFS / MARKER 必须同步。
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import shutil
@@ -28,6 +29,7 @@ import sys
 from pathlib import Path
 
 # 各平台的 hooks 配置：事件名 -> 命令模板
+# 与 integrations/install_hooks.py 的 HOOK_DEFS 保持一致
 HOOK_DEFS = {
     "UserPromptSubmit": '{exe} set red --src {src} --detail UserPromptSubmit',
     "PreToolUse":       '{exe} set amber --src {src} --detail PreToolUse',
@@ -36,6 +38,7 @@ HOOK_DEFS = {
 }
 
 # 标记位，用于识别本工具注入的 hook，便于幂等/卸载
+# 与 integrations/install_hooks.py 的 MARKER 保持一致
 MARKER = "vibelight"
 
 
@@ -145,56 +148,58 @@ def _uninstall_platform(platform: str) -> bool:
     return True
 
 
-def _locate_exe(explicit: str | None) -> str:
+def _resolve_exe(explicit: str | None) -> str:
+    """定位 vibelight.exe 路径。
+
+    优先级：
+    1. 显式 --exe 参数
+    2. PyInstaller 打包环境（sys.frozen）-> sys.executable（即 vibelight.exe 自身）
+    3. 开发环境：从本文件位置往上找 dist/vibelight.exe
+    4. 都找不到 -> 报错退出，提示用 --exe
+    """
     if explicit:
         p = Path(explicit)
         if not p.exists():
-            sys.exit(f"指定的 exe 不存在: {explicit}")
+            _exit(f"指定的 exe 不存在: {explicit}")
         return str(p.resolve())
-    # 默认：与 install_hooks.py 相对的 ../dist/vibelight/vibelight.exe
-    here = Path(__file__).resolve().parent
+
+    # 打包环境：自己就是 vibelight.exe
+    if getattr(sys, "frozen", False):
+        return str(Path(sys.executable).resolve())
+
+    # 开发环境：从 src/vibelight/hooks.py 往上找 ../dist/vibelight.exe
+    here = Path(__file__).resolve().parent  # src/vibelight/
     candidates = [
-        here.parent / "dist" / "vibelight" / "vibelight.exe",
-        here.parent / "dist" / "vibelight.exe",
+        here.parent.parent / "dist" / "vibelight.exe",  # <repo>/dist/vibelight.exe
         here.parent / "vibelight.exe",
     ]
     for c in candidates:
         if c.exists():
             return str(c.resolve())
-    sys.exit(
-        "未找到 vibelight.exe。请先运行打包，或用 --exe <路径> 指定。\n"
-        f"已尝试: {[str(c) for c in candidates]}"
+
+    _exit(
+        "未找到 vibelight.exe。打包后运行时本会用自身路径；开发运行请用 --exe <路径> 指定，"
+        f"或先打包：pyinstaller vibelight.spec --noconfirm --clean。已尝试: {[str(c) for c in candidates]}"
     )
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="安装/卸载 VibeLight hooks")
-    ap.add_argument("--claude", action="store_true", help="只装 Claude Code")
-    ap.add_argument("--zcode", action="store_true", help="只装 ZCode")
-    ap.add_argument("--exe", default=None, help="指定 vibelight.exe 路径")
-    ap.add_argument("--uninstall", action="store_true", help="移除已安装的 hooks")
-    args = ap.parse_args()
+def _exit(msg: str) -> None:
+    """统一退出方式（打印到 stderr 后 SystemExit）。"""
+    print(f"错误: {msg}", file=sys.stderr)
+    raise SystemExit(2)
 
-    platforms = []
-    if args.claude:
-        platforms.append("claude")
-    if args.zcode:
-        platforms.append("zcode")
-    if not platforms:
-        platforms = ["claude", "zcode"]
 
-    if args.uninstall:
+def run(platforms: list[str], exe: str | None, uninstall: bool) -> int:
+    """入口：安装或卸载指定平台的 hooks。返回退出码。"""
+    if uninstall:
         for p in platforms:
             _uninstall_platform(p)
+        print("\n卸载完成。")
         return 0
 
-    exe = _locate_exe(args.exe)
-    print(f"使用 vibelight: {exe}")
+    exe_path = _resolve_exe(exe)
+    print(f"使用 vibelight: {exe_path}")
     for p in platforms:
-        _install_platform(p, exe)
-    print("\n完成。现在启动托盘守护进程：双击 vibelight.exe（或运行 vibelight tray）。")
+        _install_platform(p, exe_path)
+    print("\n安装完成。现在双击 vibelight.exe 启动桌面灯即可（Claude Code 状态会自动上报）。")
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

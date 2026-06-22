@@ -45,12 +45,14 @@ ZCode ────────┼─► vibelight set red/amber/green ─► sta
 
 1. 到 [Releases](../../releases) 下载 `vibelight.exe`。
 2. 双击运行，桌面右上角出现一个圆形灯 🔴🟡🟢 之一。
-3. ZCode 用户：自动生效（灯会随 ZCode 日志实时变色，无需配置）。
-4. Claude Code 用户：安装 hooks 让状态自动上报：
-   ```bat
-   python integrations\install_hooks.py --exe C:\path\to\vibelight.exe
-   ```
-   详见 [集成各平台](#集成各平台)。
+3. 按你用的 AI 工具分情况：
+   - **ZCode 用户**：双击即用，灯随 ZCode 日志实时变色，**无需任何配置**。
+   - **Claude Code 用户**：双击启动灯后，再跑一条命令配 hooks（exe 自己定位自己，不用 Python、不用 clone 源码）：
+     ```bat
+     vibelight.exe install-hooks --claude
+     ```
+     详见 [集成各平台](#集成各平台)。
+   - **其他 AI 工具（OpenCode / Codex / Aider 等）**：暂不支持自动接入，灯会停在空闲灰态（见路线图 Phase 2）。
 
 ### 方式二：从源码运行 / 自行打包
 
@@ -80,6 +82,7 @@ pyinstaller vibelight.spec --noconfirm --clean
 | `vibelight status` | 打印当前所有 agent 状态与聚合结果 |
 | `vibelight clear --src <agent>` | 移除某 agent 状态 |
 | `vibelight icons` | 导出四态图标 PNG 到 `assets/icons` |
+| `vibelight install-hooks [--claude] [--zcode] [--exe PATH] [--uninstall]` | 安装/卸载 Claude Code hooks（ZCode 通常不需要） |
 
 **状态文件位置**：`%APPDATA%\VibeLight\state.json`（Windows）/ `~/.vibelight/state.json`（macOS/Linux）。
 **配置文件位置**：`%APPDATA%\VibeLight\config.json`（记录桌面灯位置等）。
@@ -88,13 +91,14 @@ pyinstaller vibelight.spec --noconfirm --clean
 
 ### Claude Code
 
-Claude Code 原生支持 hooks（`UserPromptSubmit` / `PreToolUse` / `Stop` / `Notification`）。一键安装：
+Claude Code 原生支持 hooks（`UserPromptSubmit` / `PreToolUse` / `Stop` / `Notification`）。用内置子命令一键安装（exe 自己定位自己，不用 Python、不用 clone 源码）：
 
 ```bat
-python integrations\install_hooks.py --claude --exe C:\path\to\vibelight.exe
+vibelight.exe install-hooks --claude
 ```
 
-脚本会合并到 `~/.claude/settings.json`，幂等可重复执行。对应的事件映射：
+命令会合并到 `~/.claude/settings.json`，幂等可重复执行；卸载用 `vibelight.exe install-hooks --claude --uninstall`。
+（源码运行场景也可用 `python integrations\install_hooks.py --claude --exe <path>`，逻辑一致。）对应的事件映射：
 
 | Claude 事件 | VibeLight 状态 | 含义 |
 | ---- | ---- | ---- |
@@ -105,11 +109,14 @@ python integrations\install_hooks.py --claude --exe C:\path\to\vibelight.exe
 
 ### ZCode
 
-```bat
-python integrations\install_hooks.py --zcode --exe C:\path\to\vibelight.exe
-```
+**通常无需安装 hooks** —— VibeLight 内置 ZCode 日志监控（`~/.zcode/cli/log/zcode-YYYY-MM-DD.jsonl`），双击运行 exe 即自动生效，灯会随 ZCode 事件实时变色。
 
-（ZCode 的配置目录约定为 `~/.zcode/settings.json`，若实际不同请按其文档调整路径。）
+手动安装 hooks 是实验性的，一般不需要；且手动装的 hook 会与内置监控重复上报同一个 `zcode` agent（两套都写 `state.json` 的 `agents.zcode`），可能互相覆盖导致状态抖动，**不建议**：
+
+```bat
+:: 实验性，通常不需要 —— 仅当确知 ZCode 不写标准日志路径、且支持读 ~/.zcode/settings.json 的 hooks 时才考虑
+vibelight.exe install-hooks --zcode
+```
 
 ### 其他平台（OpenCode / Codex / Aider）
 
