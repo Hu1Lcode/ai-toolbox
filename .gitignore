@@ -26,4 +26,10 @@ config.json
 *.bak
 *.log
 build_log.txt
+desktop_test.log
+exe_test.log
+pip_install.log
+release_payload.json
+release_response.json
+upload_response.json
 green

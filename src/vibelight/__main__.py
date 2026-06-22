@@ -1,7 +1,8 @@
 """VibeLight 主入口。
 
 子命令：
-- 无参 / tray      : 启动系统托盘守护进程
+- 无参 / desktop   : 启动桌面悬浮灯（默认，置顶圆形灯）
+- tray             : 启动系统托盘守护进程（备选模式）
 - set <state>      : 写入某个 agent 的状态（供 hook 调用，瞬时退出）
 - status           : 打印当前所有 agent 状态
 - clear <agent>    : 移除某个 agent 的状态
@@ -33,7 +34,12 @@ if sys.platform == "win32":
                 pass
 
 from . import store
-from .tray import LABELS
+from .store import LABELS
+
+
+def _cmd_desktop(args) -> int:
+    from . import desktop  # 延迟导入，避免 CLI 子命令也被拉起 GUI 依赖
+    return desktop.main()
 
 
 def _cmd_tray(args) -> int:
@@ -95,8 +101,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = p.add_subparsers(dest="cmd")
 
-    # tray（默认）
-    pt = sub.add_parser("tray", help="启动系统托盘守护进程")
+    # desktop（默认）
+    pd = sub.add_parser("desktop", help="启动桌面悬浮灯（默认）")
+    pd.set_defaults(func=_cmd_desktop)
+
+    # tray（备选模式）
+    pt = sub.add_parser("tray", help="启动系统托盘守护进程（备选）")
     pt.set_defaults(func=_cmd_tray)
 
     # set
@@ -124,11 +134,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    # 无子命令时默认启动 tray
+    # 无子命令时默认启动 desktop（桌面悬浮灯，取代托盘作为默认模式）
     if argv is None:
         argv = sys.argv[1:]
     if not argv:
-        argv = ["tray"]
+        argv = ["desktop"]
     args = parser.parse_args(argv)
     if not hasattr(args, "func"):
         parser.print_help()

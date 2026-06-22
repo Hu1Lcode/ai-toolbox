@@ -116,6 +116,51 @@ def aggregate(data: dict) -> str:
     return best
 
 
+# 状态中文标签（UI 后端共用：托盘 tooltip、桌面灯悬浮提示、CLI 输出）
+LABELS = {
+    "red": "🔴 思考中",
+    "amber": "🟡 需关注（待授权）",
+    "green": "🟢 已完成",
+    "idle": "⚫ 空闲",
+}
+
+
+def load_config() -> dict:
+    """读取 config.json。文件缺失或损坏时返回空字典。"""
+    path = config_path()
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
+def save_config(data: dict) -> None:
+    """原子写入 config.json（结构同 save_state）。"""
+    path = config_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp", prefix="cfg_")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, path)
+    except Exception:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+
+
+def update_config(**kwargs) -> dict:
+    """合并更新 config.json 的若干键，返回写后的整份配置。"""
+    cfg = load_config()
+    cfg.update(kwargs)
+    save_config(cfg)
+    return cfg
+
+
 def clear_agent(agent: str) -> dict:
     """移除某个 agent（用于进程退出时清理）。"""
     data = load_state()
